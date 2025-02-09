@@ -11,6 +11,8 @@ import time
 
 from datetime import *
 
+import requests
+
 class Command(IntEnum):
     AUTO_OFF = 0
     AUTO_ON = 1
@@ -66,13 +68,15 @@ class Event(IntEnum):
     BUILD_PACKET = 0
     TIMER_START = 1
     PEOPLE_IN_THE_ROOM = 2
+    BUILD_PACKET_AND_TIMER_START = 3
 
 
     
 
 class Packet():
-    def __init__(self, timestamp: datetime, duration: float, on_mode: Mode, off_mode: Mode, color: Color, color_mode: Mode, light_intensity: LightIntensity, power_consumption: float):
+    def __init__(self, timestamp: datetime, username: str, duration: float, on_mode: Mode, off_mode: Mode, color: Color, color_mode: Mode, light_intensity: LightIntensity, power_consumption: float):
         self.timestamp = timestamp
+        self.username = username
         self.duration = duration 
         self.on_mode = on_mode
         self.off_mode = off_mode
@@ -80,6 +84,19 @@ class Packet():
         self.color_mode = color_mode
         self.light_intensity = light_intensity
         self.power_consumption = power_consumption
+    
+    def to_dict(self):
+        return {
+            'timestamp': str(self.timestamp),
+            'username': self.username,
+            'duration': self.duration,
+            'on mode': str(self.on_mode),
+            'off mode': str(self.off_mode),
+            'color': str(self.color),
+            'color mode': str(self.color_mode),
+            'light intensity': int(self.light_intensity),
+            'power consumption': self.power_consumption
+        }
 
 
 
@@ -95,7 +112,7 @@ class Bridge():
         self.last_int_message: int
         self.timer_start: datetime
 
-        self.packet = Packet(None, None, None, None, None, None, None, None)
+        self.packet = Packet(None, 'Saverio', None, None, None, None, None, None, None)
         self.last_int_message = None
 
         self.setupSerial()
@@ -140,23 +157,24 @@ class Bridge():
 
         self.clientMQTT.loop_start()
 
+    
     def on_connect(self, client, userdata, flags, rc):
         print("Connected with result code " + str(rc))
         
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        t = self.config.get("MQTT","SubTopic", fallback= "home")
-        
-        self.clientMQTT.subscribe(t)
-        print("Subscribed to " + t)
-        #TODO handle multiple subtopics
+        topics = [self.config.get("MQTT","SubTopicBedroomLight", fallback= "home"), self.config.get("MQTT","SubTopicBathroomLight", fallback= "home"),
+        self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"), self.config.get("MQTT","SubTopicKitchenLight", fallback= "home")]
+        self.clientMQTT.subscribe([(t, 0) for t in topics])
+        print("Subscribed to " + str(topics))
 
     # The callback for when a PUBLISH message is received from the server.
     # User sends input from mobile app
+    #TODO refactor to handle multiple subtopics 
     # TODO bridge subscribed to topic 'user' and publishes to topic 'home', mobile_app subscribed to topic 'home' and publishes to topic 'user' 
     def on_message(self, client, userdata, msg):
         print(msg.topic + " " + str(msg.payload))
-        if msg.topic == self.config.get("MQTT","SubTopic", fallback= "home"):
+        if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"):
             if not self.ser is None:
                 # we add a 1 at the end to tell the micro it was a command sent by the mobile app
                 if msg.payload == b'ON' or msg.payload == b'On' or msg.payload == b'on':
@@ -183,6 +201,7 @@ class Bridge():
                     msg.payload = b'-2\n'
                 print(str(msg.payload))
                 self.ser.write(msg.payload)
+        
     
     def execute_audio_command(self):
         audio = ap.capture_voice_input()
@@ -210,24 +229,31 @@ class Bridge():
             #self.execute_audio_command()
     
     def useMessage(self, int_message: int):
-        event: Event
-        if self.hasToBuildPacket(int_message):
+        event = Event.TIMER_START #TODO understand why sometimes the ifs below are not executed
+
+        if self.hasToBuildPacketAndStartTimer(int_message):
+            self.buildPacket(int_message)
+            self.sendPacket()
+            self.timer_start = datetime.now()
+            event = event.BUILD_PACKET_AND_TIMER_START
+            self.last_int_message = int_message
+        elif self.hasToBuildPacket(int_message):
             self.buildPacket(int_message)
             event = Event.BUILD_PACKET
             self.sendPacket(self.packet)
             self.last_int_message = int_message
-        if self.hasToStartTimer(int_message):
+        elif self.hasToStartTimer(int_message):
             self.timer_start = datetime.now()
-            if self.evaluateMessage(int_message, Type.COLOR):
+            if self.evaluateMessage(int_message, Type.COLOR): # If a COLOR is picked then the intensity is HIGH
                 self.packet.color = self.findColor(int_message)
                 self.packet.color_mode = self.findColorMode(int_message)
                 self.packet.light_intensity = LightIntensity.HIGH
-            if self.evaluateMessage(int_message, Type.ON):
+            if self.evaluateMessage(int_message, Type.ON): # If a light is turned ON then the COLOR is WHITE and the intensity is HIGH 
                 self.packet.on_mode = self.findOnMode(int_message)
                 self.packet.color = Color.WHITE
                 self.packet.color_mode = self.packet.on_mode
                 self.packet.light_intensity = LightIntensity.HIGH
-            if self.evaluateMessage(int_message, Type.LIGHT_INTENSITY):
+            if self.evaluateMessage(int_message, Type.LIGHT_INTENSITY): # If LIGHT INTENISTY changes then the light is WHITE and the mode is AUTO
                 self.packet.light_intensity = self.findLightIntensity(int_message)
                 self.packet.color = Color.WHITE
                 self.packet.on_mode = Mode.AUTO
@@ -253,10 +279,45 @@ class Bridge():
         
     
     def hasToBuildPacket(self, int_message: int):
-        return (self.evaluateMessage(int_message, Type.OFF) and self.evaluateMessage(self.last_int_message, Type.ON)) or (self.evaluateMessage(int_message, Type.COLOR) and self.evaluateMessage(self.last_int_message, Type.ON)) or (self.evaluateMessage(int_message, Type.OFF) and self.evaluateMessage(self.last_int_message, Type.COLOR)) or (self.evaluateMessage(int_message, Type.COLOR) and self.evaluateMessage(self.last_int_message, Type.COLOR)) or (self.evaluateMessage(int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY)) or (self.evaluateMessage(int_message, Type.OFF) and self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY)) or (self.evaluateMessage(int_message, Type.COLOR) and self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY)) or (self.evaluateMessage(int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(self.last_int_message, Type.ON))
+        if self.evaluateMessage(self.last_int_message, Type.ON) and self.evaluateMessage(int_message, Type.OFF): # ON -> OFF
+            return True
+        if self.evaluateMessage(self.last_int_message, Type.COLOR) and self.evaluateMessage(int_message, Type.OFF): # COLOR -> OFF
+            return True
+        if self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(int_message, Type.OFF): # LIGHT INTENSITY -> OFF
+            return True 
+        if self.evaluateMessage(self.last_int_message, Type.ON) and self.evaluateMessage(int_message, Type.LIGHT_INTENSITY): # ON -> LIGHT INTENSITY
+            return True
+
+        return False
     
     def hasToStartTimer(self, int_message: int):
-        return (self.evaluateMessage(int_message, Type.ON) and self.evaluateMessage(self.last_int_message, Type.OFF)) or (self.evaluateMessage(int_message, Type.COLOR) and self.evaluateMessage(self.last_int_message, Type.OFF)) or (self.evaluateMessage(int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(self.last_int_message, Type.OFF)) or (self.last_int_message is None)
+        if self.evaluateMessage(self.last_int_message, Type.OFF) and self.evaluateMessage(int_message, Type.ON): # OFF -> ON
+            return True 
+        if self.evaluateMessage(self.last_int_message, Type.OFF) and self.evaluateMessage(int_message, Type.COLOR): # OFF -> COLOR 
+            return True 
+        if self.evaluateMessage(self.last_int_message, Type.OFF) and self.evaluateMessage(int_message, Type.LIGHT_INTENSITY): # OFF -> LIGHT INTENSITY
+            return True 
+        if self.last_int_message is None:
+            return True
+
+        return False
+    
+    def hasToBuildPacketAndStartTimer(self, int_message: int):
+        if self.evaluateMessage(self.last_int_message, Type.COLOR) and self.evaluateMessage(int_message, Type.COLOR): # COLOR -> COLOR
+            if self.findColor(self.last_int_message) != self.findColor(int_message): # OLD COLOR != NEW COLOR
+                return True 
+        if self.evaluateMessage(self.last_int_message, Type.ON) and self.evaluateMessage(int_message, Type.COLOR): # ON -> COLOR
+            return True 
+        if self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(int_message, Type.LIGHT_INTENSITY): # LIGHT INTENSITY -> LIGHT INTENISTY
+            if self.findLightIntensity(self.last_int_message) != self.findLightIntensity(int_message): # OLD LIGHT INTENSiTY != NEW LIGHT INTENSiTY
+                return True
+        if self.evaluateMessage(self.last_int_message, Type.LIGHT_INTENSITY) and self.evaluateMessage(int_message, Type.COLOR): # LIGHT INTENSITY -> COLOR
+            return True 
+        
+        return False 
+        
+        
+        
 
     def buildPacket(self, int_message: int):
         print('building packet')
@@ -269,27 +330,33 @@ class Bridge():
         self.packet.power_consumption = self.packet.duration * price
         
     # Send packet to the rest server
-    def sendPacket(self, packet: Packet):
-        pass
+    def sendPacket(self):
+        requests.post(self.config.get('HTTP', 'URL', fallback='http://127.0.0.1:5000/bridge'), json=self.packet.to_dict(), headers={'Content-type': 'application/json'})
+        #print('sending packet')
 
-
-    # Notify mobile app that something has changed
+    # Notify mobile app and server that something has changed
+    #TODO refactor multiple pubtopics
     def notify_subscribers(self, event: Event, message: int):
         if event == Event.BUILD_PACKET:
             if self.evaluateMessage(message, Type.OFF):
-                self.clientMQTT.publish(self.config.get("MQTT","PubTopic", fallback= "user"), 'light off')
+                self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), 'off')
             if self.evaluateMessage(message, Type.COLOR):
                 color = self.findColor(message)
-                self.clientMQTT.publish(self.config.get("MQTT","PubTopic", fallback= "user"), f'color changed to {str(color)}')
+                self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)}')
         if event == Event.TIMER_START:
             if self.evaluateMessage(message, Type.ON):
-                self.clientMQTT.publish(self.config.get("MQTT","PubTopic", fallback= "user"), 'light on')
+                self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), 'on')
             if self.evaluateMessage(message, Type.COLOR):
                 color = self.findColor(message)
-                self.clientMQTT.publish(self.config.get("MQTT","PubTopic", fallback= "user"), f'color changed to {str(color)}')
+                self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)}')
         if event == Event.PEOPLE_IN_THE_ROOM:
-            #self.clientMQTT.publish(self.config.get("MQTT","PubTopic", fallback= "user"), f'{message} people in the room')
-            pass
+            #self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "user"), f'{message}')
+            print('people in the room')
+        if event == Event.BUILD_PACKET_AND_TIMER_START:
+            if self.evaluateMessage(message, Type.COLOR):
+                color = self.findColor(message)
+                self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)}')
+
     
     def findColor(self, message: int):
         if 8 <= message <= 9:

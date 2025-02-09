@@ -8,8 +8,9 @@
             "name": "bridge",
             "type": "debugpy",
             "request": "launch",
-            "program": "bridge/bridge.py",
-            "console": "integratedTerminal"
+            "program": "bridge.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/bridge/"
         },
     ]
 }
