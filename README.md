@@ -36,11 +36,11 @@ The mobile app (e.g., the user) sends the bridge messages about the light status
 
 The information flow is the following: ![](images/mqtt-app-bridge.png)
 
-#### Bridge -> (Mobile App, Server) 
+#### Bridge -> (Mobile App, Generic Client) 
 
-The bridge receives from the micro messages about the light status and color, and the number of people in the room, and forwards them to both mobile app and server. 
+The bridge receives from the micro messages about the light status and color, and the number of people in the room, and forwards them to both mobile app and any connected client. 
 
-The information flow is the following: ![](images/mqtt-bridge-app-server.png)
+The information flow is the following: ![](images/mqtt-bridge-app-client.png)
 
 ### HTTP 
 
