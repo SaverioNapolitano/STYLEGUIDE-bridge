@@ -14,7 +14,7 @@ The bridge and the microcontroller talk to each other over a serial connection, 
 
 ### Serial Protocol
 
-The bridge waits for messages from the micro on the serial (more details [here](https://github.com/SaverioNapolitano/STYLEGUIDE-micro?tab=readme-ov-file#serial-protocol))and then processes them. 
+The bridge waits for messages from the micro on the serial (more details [here](https://github.com/SaverioNapolitano/STYLEGUIDE-micro?tab=readme-ov-file#serial-protocol)) and then processes them. 
 
 #### Process Message 
 
