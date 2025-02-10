@@ -44,7 +44,7 @@ The information flow is the following: ![](images/mqtt-bridge-app-client.png)
 
 ### HTTP 
 
-The bridge builds and sends data packets to the server to store info about user habits and consumption, the server uses these info to compute relevant data for the user (see Server/README.md)
+The bridge builds and sends data packets to the server to store info about user habits and consumption, the server uses these info to compute relevant data for the user (see [here](https://github.com/SaverioNapolitano/STYLEGUIDE-server?tab=readme-ov-file#styleguide-server))
 
 Data packets are basically rows of the database and their format is the following: ![](images/data.png)
 
