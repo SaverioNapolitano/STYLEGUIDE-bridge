@@ -25,7 +25,7 @@ def convert_voice_to_text(audio):
 def process_voice_commands(text):
     if 'chuck' in text.lower():
     # we add a 0 at the end to tell the micro it was a voice command
-        if "on" in text.lower():
+        if "on" in text.lower() or "white" in text.lower():
             return b'255,255,255,0\n'
         if "off" in text.lower():
             return b'0,0,0,0\n'

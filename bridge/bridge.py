@@ -46,7 +46,7 @@ class Type(IntEnum):
 class Mode(StrEnum):
     AUTO = auto()
     SWITCH = auto()
-    USER = auto()
+    MOBILE_APP = 'mobile app'
     VOICE = auto()
 
 class Color(StrEnum):
@@ -142,8 +142,6 @@ class Bridge():
         except:
             self.ser = None
             print("Cannot connect to " + self.portname)
-        
-        self.inbuffer = []
     
     def setupMQTT(self):
         self.clientMQTT = mqtt.Client()
@@ -170,8 +168,6 @@ class Bridge():
 
     # The callback for when a PUBLISH message is received from the server.
     # User sends input from mobile app
-    #TODO refactor to handle multiple subtopics 
-    # TODO bridge subscribed to topic 'user' and publishes to topic 'home', mobile_app subscribed to topic 'home' and publishes to topic 'user' 
     def on_message(self, client, userdata, msg):
         print(msg.topic + " " + str(msg.payload))
         if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"):
@@ -334,7 +330,6 @@ class Bridge():
         #print('sending packet')
 
     # Notify mobile app and server that something has changed
-    #TODO refactor multiple pubtopics
     def notify_subscribers(self, event: Event, message: int):
         if event == Event.BUILD_PACKET:
             if self.evaluateMessage(message, Type.OFF):
@@ -374,7 +369,7 @@ class Bridge():
             return Color.ORANGE
     
     def findColorMode(self, message: int):
-        return Mode.USER if message % 2 > 0 else Mode.VOICE
+        return Mode.MOBILE_APP if message % 2 > 0 else Mode.VOICE
     
     def findOnMode(self, message: int):
         if message == 1:
@@ -382,7 +377,7 @@ class Bridge():
         if message == 3:
             return Mode.SWITCH
         if message == 5:
-            return Mode.USER
+            return Mode.MOBILE_APP
         if message == 7:
             return Mode.VOICE
     
@@ -392,7 +387,7 @@ class Bridge():
         if message == 2:
             return Mode.SWITCH
         if message == 4:
-            return Mode.USER
+            return Mode.MOBILE_APP
         if message == 6:
             return Mode.VOICE
     
