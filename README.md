@@ -52,7 +52,7 @@ Data packets are basically rows of the database and their format is the followin
 
 To control the light status and color using only your voice, the bridge features the voice assistant **Chuck** ([why Chuck? (Italian)](https://www.barzellette.net/frasi-chuck-norris.html)). 
 
-Just call him (`Hey Chuck` or simply `Chuck`) and ask him to turn on/off your lights or to change the color of a light. 
+Just call it (`Hey Chuck` or simply `Chuck`) and ask it to turn on/off your lights or to change the color of a light. 
 
 Currently Chuck understands the following commands:
 - turn on a light 
