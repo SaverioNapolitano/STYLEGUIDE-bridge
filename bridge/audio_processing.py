@@ -23,22 +23,23 @@ def convert_voice_to_text(audio):
     return text 
 
 def process_voice_commands(text):
+    if 'chuck' in text.lower():
     # we add a 0 at the end to tell the micro it was a voice command
-    if "on" in text.lower():
-        return b'255,255,255,0\n'
-    if "off" in text.lower():
-        return b'0,0,0,0\n'
-    if "red" in text.lower():
-        return b'255,0,0,0\n'
-    if "green" in text.lower():
-        return b'0,255,0,0\n'
-    if "blue" in text.lower():
-        return b'0,0,255,0\n'
-    if "yellow" in text.lower():
-        return b'255,255,0,0\n'
-    if "orange" in text.lower():
-        return b'255,128,0,0\n'
-    if "purple" in text.lower():
-        return b'127,0,255,0\n'
-    if "pink" in text.lower():
-        return b'255,0,127,0\n'
+        if "on" in text.lower():
+            return b'255,255,255,0\n'
+        if "off" in text.lower():
+            return b'0,0,0,0\n'
+        if "red" in text.lower():
+            return b'255,0,0,0\n'
+        if "green" in text.lower():
+            return b'0,255,0,0\n'
+        if "blue" in text.lower():
+            return b'0,0,255,0\n'
+        if "yellow" in text.lower():
+            return b'255,255,0,0\n'
+        if "orange" in text.lower():
+            return b'255,128,0,0\n'
+        if "purple" in text.lower():
+            return b'127,0,255,0\n'
+        if "pink" in text.lower():
+            return b'255,0,127,0\n'

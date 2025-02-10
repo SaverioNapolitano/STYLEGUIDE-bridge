@@ -65,9 +65,9 @@ class LightIntensity(IntEnum):
     LOW = 100
 
 class Event(IntEnum):
-    BUILD_PACKET = 0
-    TIMER_START = 1
-    PEOPLE_IN_THE_ROOM = 2
+    BUILD_PACKET = 0 # HTTP
+    TIMER_START = 1 # HTTP
+    PEOPLE_IN_THE_ROOM = 2 # MQTT
     BUILD_PACKET_AND_TIMER_START = 3
 
 
@@ -177,7 +177,7 @@ class Bridge():
         if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"):
             if not self.ser is None:
                 # we add a 1 at the end to tell the micro it was a command sent by the mobile app
-                if msg.payload == b'ON' or msg.payload == b'On' or msg.payload == b'on':
+                if msg.payload == b'ON' or msg.payload == b'On' or msg.payload == b'on' or msg.payload == b'White' or msg.payload == b'white' or msg.payload == b'WHITE':
                     msg.payload = b'255,255,255,1\n'
                 if msg.payload == b'OFF' or msg.payload == b'Off' or msg.payload == b'off':
                     msg.payload = b'0,0,0,1\n'
@@ -203,9 +203,9 @@ class Bridge():
                 self.ser.write(msg.payload)
         
     
-    def execute_audio_command(self):
-        audio = ap.capture_voice_input()
+    def execute_audio_command(self, recognizer, audio):
         text = ap.convert_voice_to_text(audio)
+        print(text)
         command = ap.process_voice_commands(text)
         print(command)
         if command is not None:
@@ -226,7 +226,6 @@ class Bridge():
                         people_in_the_room = int.from_bytes(self.ser.read(1))
                         self.notify_subscribers(Event.PEOPLE_IN_THE_ROOM, people_in_the_room)
 
-            #self.execute_audio_command()
     
     def useMessage(self, int_message: int):
         event = Event.TIMER_START #TODO understand why sometimes the ifs below are not executed
@@ -240,7 +239,7 @@ class Bridge():
         elif self.hasToBuildPacket(int_message):
             self.buildPacket(int_message)
             event = Event.BUILD_PACKET
-            self.sendPacket(self.packet)
+            self.sendPacket()
             self.last_int_message = int_message
         elif self.hasToStartTimer(int_message):
             self.timer_start = datetime.now()
@@ -331,7 +330,7 @@ class Bridge():
         
     # Send packet to the rest server
     def sendPacket(self):
-        requests.post(self.config.get('HTTP', 'URL', fallback='http://127.0.0.1:5000/bridge'), json=self.packet.to_dict(), headers={'Content-type': 'application/json'})
+        requests.post(self.config.get('HTTP', 'URL', fallback='http://127.0.0.1/bridge'), json=self.packet.to_dict(), headers={'Content-type': 'application/json'})
         #print('sending packet')
 
     # Notify mobile app and server that something has changed
@@ -350,7 +349,7 @@ class Bridge():
                 color = self.findColor(message)
                 self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)}')
         if event == Event.PEOPLE_IN_THE_ROOM:
-            #self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "user"), f'{message}')
+            self.clientMQTT.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "user"), f'{message}')
             print('people in the room')
         if event == Event.BUILD_PACKET_AND_TIMER_START:
             if self.evaluateMessage(message, Type.COLOR):
@@ -409,7 +408,9 @@ class Bridge():
 
 
 def main():
+    recognizer = sr.Recognizer()
     br = Bridge()
+    recognizer.listen_in_background(sr.Microphone(), br.execute_audio_command)
     br.loop()
 
 main()
