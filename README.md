@@ -16,7 +16,7 @@ The bridge and the microcontroller talk to each other over a serial connection, 
 
 The bridge waits for messages from the micro on the serial (more details [here](https://github.com/SaverioNapolitano/STYLEGUIDE-micro?tab=readme-ov-file#serial-protocol)) and then processes them. 
 
-#### Process Message 
+#### Process Message (TO UPDATE)
 
 When the bridge receives a message from the micro, four things can happen:
 1. the bridge has to build (and send) a packet, start the timer and (optionally) notify the subscribers
