@@ -32,13 +32,13 @@ The bridge exchanges (sends and receives) MQTT messages with the mobile applicat
 
 #### Mobile App -> Bridge 
 
-The mobile app (e.g., the user) sends the bridge messages about the light status and color, the bridge forwards the message to the micro while storing useful information for building the packet (see below). 
+The mobile app (e.g., the user) sends the bridge messages about the light status, its color and intensity, the bridge forwards the message to the micro while storing useful information for building the packet (see below). 
 
 The information flow is the following: ![](images/mqtt-app-bridge.png)
 
 #### Bridge -> (Mobile App, Generic Client) 
 
-The bridge receives from the micro messages about the light status and color, and the number of people in the room, and forwards them to both mobile app and any connected client. 
+The bridge receives from the micro messages about the light status, its color, intensity and cause, and the number of people in the room, and forwards them to both mobile app and any connected client. 
 
 The information flow is the following: ![](images/mqtt-bridge-app-client.png)
 
