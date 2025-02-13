@@ -169,7 +169,7 @@ class Packet():
             'on mode': str(self.on_mode),
             'off mode': str(self.off_mode),
             'color': str(self.color),
-            'light intensity': int(self.light_intensity),
+            'light intensity': str(self.light_intensity),
             'power consumption': self.power_consumption
         }
 
@@ -180,7 +180,7 @@ class Bridge():
         self.pubtopic = self.config.get("MQTT","PubTopic", fallback= "user")
 
         self.recognizer = sr.Recognizer()
-        self.last_int_message = None
+        self.last_int_message = int(Command.AUTO_OFF)
         self.timer: datetime
         self.people_in_the_room = 0
         self.auto_mode = 'enabled'
@@ -251,7 +251,7 @@ class Bridge():
                     if self.evaluate_message(self.last_int_message, Type.OFF):
                         self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), 'off')
 
-                    self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(self.auto_mode)}')
+                    #self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(self.auto_mode)}')
             elif not self.ser is None:
                 # we add a 1 at the end to tell the micro it was a command sent by the mobile app
                 if msg.payload == b'on' or msg.payload == b'white high':
@@ -345,13 +345,13 @@ class Bridge():
 
     
     def use_message(self, int_message: int):
-        event = Event.START_TIMER #TODO understand why sometimes the ifs below are not executed
+        event: Event = None #TODO understand why sometimes the ifs below are not executed
 
         if self.has_to_build_packet_and_start_timer(int_message):
             self.build_packet(int_message)
             self.send_packet()
             self.timer = datetime.now()
-            event = event.BUILD_PACKET_AND_START_TIMER
+            event = Event.BUILD_PACKET_AND_START_TIMER
             self.last_int_message = int_message
         elif self.has_to_build_packet(int_message):
             self.build_packet(int_message)
@@ -366,8 +366,8 @@ class Bridge():
                 
             event = Event.START_TIMER
             self.last_int_message = int_message
-
-        self.notify_subscribers(event, int_message)
+        if event is not None:
+            self.notify_subscribers(event, int_message)
         
     def evaluate_message(self, message: int, message_type: Type):
         if message is not None:
@@ -416,6 +416,7 @@ class Bridge():
             self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)} {str(intensity)}')
         if event == Event.PEOPLE_IN_THE_ROOM:
             self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "user"), f'{message}')
+        
     
     def get_color(self, message: int) -> Color:
         if 8 <= message <= 19:
@@ -436,14 +437,17 @@ class Bridge():
             return Color.WHITE
     
     def get_on_mode(self, message: int) -> Mode:
-        if (message - 8) % 12 == 0 or (message - 9) % 12 == 0 or (message - 10) % 12 == 0:
+        
+        if 8 <= message <= 10 or 20 <= message <= 22 or 32 <= message <= 34 or 44 <= message <= 46 or 56 <= message <= 58 or 68 <= message <= 70 or 80 <= message <= 82 or 92 <= message <= 94:  
             return Mode.VOICE
-        if (message - 11) % 12 == 0 or message % 12 == 0 or (message - 13) % 12 == 0:
+        
+        if 11 <= message <= 13 or 23 <= message <= 25 or 35 <= message <= 37 or 47 <= message <= 49 or 59 <= message <= 61 or 71 <= message <= 73 or 83 <= message <= 85 or 95 <= message <= 97:
             return Mode.MOBILE_APP
-        if (message - 14) % 12 == 0 or (message - 15) % 12 == 0 or (message - 16) % 12 == 0:
+        
+        if 14 <= message <= 16 or 26 <= message <= 28 or 38 <= message <= 40 or 50 <= message <= 52 or 62 <= message <= 64 or 74 <= message <= 76 or 86 <= message <= 88 or 98 <= message <= 100:
             return Mode.AUTO
-        if (message - 17) % 12 == 0 or (message - 18) % 12 == 0 or (message - 19) % 12 == 0:
-            return Mode.SWITCH
+        
+        return Mode.SWITCH
     
     def getOffMode(self, message: int) -> Mode:
         if message == 0:
@@ -456,12 +460,12 @@ class Bridge():
             return Mode.VOICE
     
     def get_light_intensity(self, message: int) -> LightIntensity:
-        if (message - 8) % 3 == 0:
+        if message == 8 or message == 11 or message == 14 or message == 17 or message == 20 or message == 23 or message == 26 or message == 29 or message == 32 or message == 35 or message == 38 or message == 41 or message == 44 or message == 47 or message == 50 or message == 53 or message == 56 or message == 59 or message == 62 or message == 65 or message == 68 or message == 71 or message == 74 or message == 77 or message == 80 or message == 83 or message == 86 or message == 89 or message == 92 or message == 95 or message == 98 or message == 101:
             return LightIntensity.HIGH
-        if message % 3 == 0:
+        if message == 9 or message == 12 or message == 15 or message == 18 or message == 21 or message == 24 or message == 27 or message == 30 or message == 33 or message == 36 or message == 39 or message == 42 or message == 45 or message == 48 or message == 51 or message == 54 or message == 57 or message == 60 or message == 63 or message == 66 or message == 69 or message == 72 or message == 75 or message == 78 or message == 81 or message == 84 or message == 87 or message == 90 or message == 93 or message == 96 or message == 99 or message == 102:
             return LightIntensity.MEDIUM
-        if (message - 10) % 3 == 0:
-            return LightIntensity.LOW
+        
+        return LightIntensity.LOW
 
 def main():
     recognizer = sr.Recognizer()
