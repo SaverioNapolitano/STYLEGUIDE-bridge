@@ -233,8 +233,8 @@ class Bridge():
         
         # Subscribing in on_connect() means that if we lose the connection and
         # reconnect then subscriptions will be renewed.
-        topics = [self.config.get("MQTT","SubTopicBedroomLight", fallback= "home"), self.config.get("MQTT","SubTopicBathroomLight", fallback= "home"),
-        self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"), self.config.get("MQTT","SubTopicKitchenLight", fallback= "home")]
+        topics = [self.config.get("MQTT","SubTopicBedroomLight", fallback= "mobileapp/bedroom/light"), self.config.get("MQTT","SubTopicBathroomLight", fallback= "mobileapp/bathroom/light"),
+        self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "mobileapp/livingroom/light"), self.config.get("MQTT","SubTopicKitchenLight", fallback= "mobileapp/kitchen/light")]
         self.client_mqtt.subscribe([(t, 0) for t in topics])
         print("Subscribed to " + str(topics))
 
@@ -242,16 +242,18 @@ class Bridge():
     # User sends input from mobile app
     def on_message(self, client, userdata, msg):
         print(msg.topic + " " + str(msg.payload))
-        if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "home"):
+        if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "mobileapp/livingroom/light"):
             if msg.payload == b'state': # mobile app asking for current state
                     if self.evaluate_message(self.last_int_message, Type.ON):
                         color = self.get_color(self.last_int_message)
                         intensity = self.get_light_intensity(self.last_int_message)
-                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)} {str(intensity)}')
+                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(color)} {str(intensity)}')
                     if self.evaluate_message(self.last_int_message, Type.OFF):
-                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), 'off')
+                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), 'off')
+                    
+                    self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback="home/livingroom/people"), f'{self.people_in_the_room}')
+                    self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(self.auto_mode)}')
 
-                    #self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(self.auto_mode)}')
             elif not self.ser is None:
                 # we add a 1 at the end to tell the micro it was a command sent by the mobile app
                 if msg.payload == b'on' or msg.payload == b'white high':
@@ -366,6 +368,7 @@ class Bridge():
                 
             event = Event.START_TIMER
             self.last_int_message = int_message
+
         if event is not None:
             self.notify_subscribers(event, int_message)
         
@@ -409,13 +412,13 @@ class Bridge():
     # Notify mobile app and server that something has changed
     def notify_subscribers(self, event: Event, message: int):
         if event == Event.BUILD_PACKET: # message has to be off    
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), 'off')
+            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), 'off')
         if event == Event.START_TIMER or event == Event.BUILD_PACKET_AND_START_TIMER: # message has to be on
             color = self.get_color(message)
             intensity = self.get_light_intensity(message)
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "user"), f'{str(color)} {str(intensity)}')
+            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(color)} {str(intensity)}')
         if event == Event.PEOPLE_IN_THE_ROOM:
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "user"), f'{message}')
+            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "home/livingroom/people"), f'{message}')
         
     
     def get_color(self, message: int) -> Color:
