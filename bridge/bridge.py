@@ -134,17 +134,21 @@ class Color(StrEnum):
     PINK = auto()
     ORANGE = auto()
     WHITE = auto()
+    NONE = auto()
 
 class LightIntensity(StrEnum):
     HIGH = auto() 
     MEDIUM = auto() 
     LOW = auto()
+    ZERO = auto()
 
 class Event(IntEnum):
     BUILD_PACKET = 0 # HTTP
     START_TIMER = 1 # HTTP
     PEOPLE_IN_THE_ROOM = 2 # MQTT
     BUILD_PACKET_AND_START_TIMER = 3
+
+people_in_the_room_offset = 240
 
 
 
@@ -173,6 +177,25 @@ class Packet():
             'power consumption': self.power_consumption
         }
 
+class CurrentState():
+    def __init__(self, timestamp: datetime, room: str, color: Color, light_intensity: LightIntensity, people_in_the_room: int, auto_mode: str):
+        self.timestamp = timestamp 
+        self.room = room
+        self.color = color 
+        self.light_intensity = light_intensity
+        self.people_in_the_room = people_in_the_room
+        self.auto_mode = auto_mode
+
+    def to_dict(self):
+        return {
+            'timestamp': str(self.timestamp),
+            'room': self.room,
+            'color': str(self.color),
+            'light intensity': str(self.light_intensity),
+            'people in the room': self.people_in_the_room,
+            'auto mode': self.auto_mode
+        }
+
 class Bridge():
     def __init__(self):
         self.config = configparser.ConfigParser()
@@ -181,11 +204,12 @@ class Bridge():
 
         self.recognizer = sr.Recognizer()
         self.last_int_message = int(Command.AUTO_OFF)
-        self.timer: datetime
-        self.people_in_the_room = 0
+        self.timer = datetime.now()
         self.auto_mode = 'enabled'
 
-        self.packet = Packet(None, 'Saverio', None, None, None, None, None, None)
+        self.packet = Packet(datetime.now(), 'Saverio', 0, Mode.AUTO, Mode.AUTO, Color.NONE, LightIntensity.ZERO, 0)
+        self.current_state = CurrentState(datetime.now(), 'Living Room', Color.NONE, LightIntensity.ZERO, 0, 'enabled')
+        self.update_current_state()
 
         self.setup_serial()
         self.setup_mqtt()
@@ -242,26 +266,14 @@ class Bridge():
     # User sends input from mobile app
     def on_message(self, client, userdata, msg):
         print(msg.topic + " " + str(msg.payload))
-        if msg.topic == self.config.get("MQTT","SubTopicLivingRoomLight", fallback= "mobileapp/livingroom/light"):
-            if msg.payload == b'state': # mobile app asking for current state
-                    if self.evaluate_message(self.last_int_message, Type.ON):
-                        color = self.get_color(self.last_int_message)
-                        intensity = self.get_light_intensity(self.last_int_message)
-                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(color)} {str(intensity)}')
-                    if self.evaluate_message(self.last_int_message, Type.OFF):
-                        self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), 'off')
-                    
-                    self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback="home/livingroom/people"), f'{self.people_in_the_room}')
-                    self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(self.auto_mode)}')
-
-            elif not self.ser is None:
+        if not self.ser is None:
                 # we add a 1 at the end to tell the micro it was a command sent by the mobile app
                 if msg.payload == b'on' or msg.payload == b'white high':
                     msg.payload = b'255,255,255,1'
                 if msg.payload == b'white low':
                     msg.payload = b'8,8,8,1'
                 if msg.payload == b'white medium':
-                    msg.payload == b'64,64,64,1'
+                    msg.payload = b'64,64,64,1'
                 if msg.payload == b'off':
                     msg.payload = b'0,0,0,1'
                 if msg.payload == b'red high':
@@ -318,11 +330,9 @@ class Bridge():
     
     def execute_audio_command(self, recognizer, audio):
         text = ap.convert_voice_to_text(audio)
-        #print(text)
         command = ap.process_voice_commands(text)
         #print(command)
         if command is not None:
-            #print("I'm sending the command")
             self.ser.write(command)
     
     def loop(self):
@@ -334,43 +344,67 @@ class Bridge():
                     if int_message <= 103:
                         print(f'Received message {int_message} from the micro')
                         self.use_message(int_message)
-                        #print('Call useMessage')
                     else:
+                        print(f'Received message {int_message} from the micro')
                         if int_message == 238:
-                            self.auto_mode = 'enabled'
+                            self.current_state.auto_mode = 'enabled'
+                            self.update_current_state()
                         elif int_message == 239:
-                            self.auto_mode = 'disabled'
+                            self.current_state.auto_mode = 'disabled'
+                            self.update_current_state()
                         else:
-                            people_in_the_room = int.from_bytes(self.ser.read(1))
-                            self.people_in_the_room = people_in_the_room
-                            self.notify_subscribers(Event.PEOPLE_IN_THE_ROOM, people_in_the_room)
+                            people_in_the_room = int_message - people_in_the_room_offset
+                            print(f'{people_in_the_room} people in the room')
+                            self.current_state.people_in_the_room = people_in_the_room
+                            self.update_current_state()
 
     
     def use_message(self, int_message: int):
-        event: Event = None #TODO understand why sometimes the ifs below are not executed
 
-        if self.has_to_build_packet_and_start_timer(int_message):
+        if self.has_to_build_packet_and_start_timer(int_message): # ON -> ON
+
+            color = self.get_color(self.last_int_message)
+            light_intensity = self.get_light_intensity(self.last_int_message)
+
+            self.packet.color = color
+            self.packet.light_intensity = light_intensity
+            self.packet.on_mode = self.get_on_mode(self.last_int_message)
+
+            print('build packet and start timer')
             self.build_packet(int_message)
             self.send_packet()
+
             self.timer = datetime.now()
-            event = Event.BUILD_PACKET_AND_START_TIMER
-            self.last_int_message = int_message
-        elif self.has_to_build_packet(int_message):
+
+            self.current_state.color = self.get_color(int_message)
+            self.current_state.light_intensity = self.get_light_intensity(int_message)
+            self.update_current_state()
+
+        elif self.has_to_build_packet(int_message): # ON -> OFF
+            print('build packet')
+
             self.build_packet(int_message)
-            event = Event.BUILD_PACKET
             self.send_packet()
-            self.last_int_message = int_message
-        elif self.has_to_start_timer(int_message):
+
+            self.current_state.color = Color.NONE
+            self.current_state.light_intensity = LightIntensity.ZERO
+            self.update_current_state()
+
+        elif self.has_to_start_timer(int_message): # OFF -> ON
+            print('start timer')
             self.timer = datetime.now()
-            self.packet.color = self.get_color(int_message)
-            self.packet.light_intensity = self.get_light_intensity(int_message)
+            color = self.get_color(int_message)
+            light_intensity = self.get_light_intensity(int_message)
+
+            self.packet.color = color
+            self.packet.light_intensity = light_intensity
             self.packet.on_mode = self.get_on_mode(int_message)
-                
-            event = Event.START_TIMER
-            self.last_int_message = int_message
 
-        if event is not None:
-            self.notify_subscribers(event, int_message)
+            self.current_state.color = color 
+            self.current_state.light_intensity = light_intensity
+            self.update_current_state()
+        
+        self.last_int_message = int_message
         
     def evaluate_message(self, message: int, message_type: Type):
         if message is not None:
@@ -395,9 +429,6 @@ class Bridge():
         return False 
 
     def build_packet(self, int_message: int):
-        print('building packet')
-        print(f'last message: {self.last_int_message}')
-        print(f'current message: {int_message}')
         price = 0.15 #TODO set price
         self.packet.timestamp = datetime.now()
         self.packet.duration = (self.packet.timestamp-self.timer).total_seconds()
@@ -406,8 +437,13 @@ class Bridge():
         
     # Send packet to the rest server
     def send_packet(self):
-        requests.post(self.config.get('HTTP', 'URL', fallback='http://127.0.0.1/bridge'), json=self.packet.to_dict(), headers={'Content-type': 'application/json'})
-        #print('sending packet')
+        requests.post(self.config.get('HTTP', 'URLPacket', fallback='http://127.0.0.1/bridge/packet'), json=self.packet.to_dict(), headers={'Content-type': 'application/json'})
+        print('sending packet')
+    
+    def update_current_state(self):
+        print('updating the current state')
+        self.current_state.timestamp = datetime.now()
+        requests.post(self.config.get('HTTP', 'URLState', fallback='http://127.0.0.1/bridge/state'), json=self.current_state.to_dict(), headers={'Content-type': 'application/json'})
 
     # Notify mobile app and server that something has changed
     def notify_subscribers(self, event: Event, message: int):
