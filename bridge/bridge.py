@@ -155,9 +155,10 @@ people_in_the_room_offset = 240
     
 
 class Packet():
-    def __init__(self, timestamp: datetime, username: str, duration: float, on_mode: Mode, off_mode: Mode, color: Color, light_intensity: LightIntensity, power_consumption: float):
+    def __init__(self, timestamp: datetime, username: str, room: str, duration: float, on_mode: Mode, off_mode: Mode, color: Color, light_intensity: LightIntensity, power_consumption: float):
         self.timestamp = timestamp
         self.username = username
+        self.room = room
         self.duration = duration 
         self.on_mode = on_mode
         self.off_mode = off_mode
@@ -169,6 +170,7 @@ class Packet():
         return {
             'timestamp': str(self.timestamp),
             'username': self.username,
+            'room': str(self.room),
             'duration': self.duration,
             'on mode': str(self.on_mode),
             'off mode': str(self.off_mode),
@@ -178,8 +180,9 @@ class Packet():
         }
 
 class CurrentState():
-    def __init__(self, timestamp: datetime, room: str, color: Color, light_intensity: LightIntensity, people_in_the_room: int, auto_mode: str):
+    def __init__(self, timestamp: datetime, username: str, room: str, color: Color, light_intensity: LightIntensity, people_in_the_room: int, auto_mode: str):
         self.timestamp = timestamp 
+        self.username = username
         self.room = room
         self.color = color 
         self.light_intensity = light_intensity
@@ -189,6 +192,7 @@ class CurrentState():
     def to_dict(self):
         return {
             'timestamp': str(self.timestamp),
+            'username': str(self.username),
             'room': self.room,
             'color': str(self.color),
             'light intensity': str(self.light_intensity),
@@ -207,8 +211,8 @@ class Bridge():
         self.timer = datetime.now()
         self.auto_mode = 'enabled'
 
-        self.packet = Packet(datetime.now(), 'Saverio', 0, Mode.AUTO, Mode.AUTO, Color.NONE, LightIntensity.ZERO, 0)
-        self.current_state = CurrentState(datetime.now(), 'Living Room', Color.NONE, LightIntensity.ZERO, 0, 'enabled')
+        self.packet = Packet(datetime.now(), 'Saverio', 'Living Room', 0, Mode.AUTO, Mode.AUTO, Color.NONE, LightIntensity.ZERO, 0)
+        self.current_state = CurrentState(datetime.now(), 'Saverio', 'Living Room', Color.NONE, LightIntensity.ZERO, 0, 'enabled')
         self.update_current_state()
 
         self.setup_serial()
@@ -444,18 +448,6 @@ class Bridge():
         print('updating the current state')
         self.current_state.timestamp = datetime.now()
         requests.post(self.config.get('HTTP', 'URLState', fallback='http://127.0.0.1/bridge/state'), json=self.current_state.to_dict(), headers={'Content-type': 'application/json'})
-
-    # Notify mobile app and server that something has changed
-    def notify_subscribers(self, event: Event, message: int):
-        if event == Event.BUILD_PACKET: # message has to be off    
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), 'off')
-        if event == Event.START_TIMER or event == Event.BUILD_PACKET_AND_START_TIMER: # message has to be on
-            color = self.get_color(message)
-            intensity = self.get_light_intensity(message)
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomLight", fallback= "home/livingroom/light"), f'{str(color)} {str(intensity)}')
-        if event == Event.PEOPLE_IN_THE_ROOM:
-            self.client_mqtt.publish(self.config.get("MQTT","PubTopicLivingRoomPeople", fallback= "home/livingroom/people"), f'{message}')
-        
     
     def get_color(self, message: int) -> Color:
         if 8 <= message <= 19:
