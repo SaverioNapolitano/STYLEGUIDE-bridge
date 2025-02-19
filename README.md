@@ -16,12 +16,12 @@ The bridge and the microcontroller talk to each other over a serial connection, 
 
 The bridge waits for messages from the micro on the serial (more details [here](https://github.com/SaverioNapolitano/STYLEGUIDE-micro?tab=readme-ov-file#serial-protocol)) and then processes them. 
 
-#### Process Message (TO UPDATE)
+#### Process Message
 
 When the bridge receives a message from the micro, four things can happen:
 1. the bridge has to build (and send) a packet, start the timer and update the current state
 2. the bridge has to build (and send) a packet and update the current state
-3. the bridge has to start the timer and update the current syaye
+3. the bridge has to start the timer and update the current state
 4. the bridge has to update the current state
 
 These cases are described by the following finite state machine (FSM) based on the type of the messages (since the update of the current state is always executed it is not shown). Both the current received message and the previous received message are evaluated to decide what to do: ![](images/message_fsm.png)
